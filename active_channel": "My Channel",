@@ -1,0 +1,31 @@
+{
+  "active_channel": "My Channel",
+  "channels": [
+    {
+      "name": "My Channel",
+      "channel_id": "UCxxxxxxxxxxxxxxxxxxxxxx",
+      "handle": "@handle",
+      "type": "owned",
+      "niche": "e.g. kids rhymes",
+      "language": "e.g. Hindi",
+      "audience": "e.g. ages 2-5 and parents",
+      "format": "long | shorts | both",
+      "cadence": 3,
+      "voice": "Warm, simple, sing-song. Short sentences.",
+      "off_limits": []
+    },
+    {
+      "name": "Competitor",
+      "channel_id": "UCyyyyyyyyyyyyyyyyyyyyyy",
+      "handle": "@rival",
+      "type": "watched",
+      "niche": "same niche",
+      "language": "",
+      "audience": "",
+      "format": "long",
+      "cadence": 0,
+      "voice": "",
+      "off_limits": []
+    }
+  ]
+}
