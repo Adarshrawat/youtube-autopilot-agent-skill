@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Channel registry for the youtube-autopilot skill.
+
+Keeps channels.json: add / list / switch / remove / sync.
+Usage:
+  python scripts/channel_registry.py add --name "My Channel" --channel-id UC... --handle @me --type owned --niche "kids rhymes" --language Hindi
+  python scripts/channel_registry.py list
+  python scripts/channel_registry.py switch "My Channel"
+  python scripts/channel_registry.py remove "My Channel"
+  python scripts/channel_registry.py sync channels_from_vidiq.json   # list of {channelId,title,handle}
+"""
+import argparse, json, os, sys
+
+PATH = os.environ.get("CHANNELS_JSON", "channels.json")
+FIELDS = ["niche", "language", "audience", "format", "cadence", "voice"]
+
+
+def load():
+    if os.path.exists(PATH):
+        with open(PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return {"active_channel": None, "channels": []}
+
+
+def save(db):
+    with open(PATH, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
+
+
+def find(db, key):
+    k = key.lower()
+    for c in db["channels"]:
+        if k in (c["name"].lower(), c.get("handle", "").lower(), c.get("channel_id", "").lower()):
+            return c
+    return None
+
+
+def upsert(db, entry):
+    cur = find(db, entry.get("channel_id") or entry["name"]) or find(db, entry["name"])
+    if cur:
+        cur.update({k: v for k, v in entry.items() if v not in (None, "")})
+        return cur, False
+    entry.setdefault("off_limits", [])
+    db["channels"].append(entry)
+    if not db.get("active_channel") and entry["type"] == "owned":
+        db["active_channel"] = entry["name"]
+    return entry, True
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("add")
+    a.add_argument("--name", required=True)
+    a.add_argument("--channel-id", default="")
+    a.add_argument("--handle", default="")
+    a.add_argument("--type", choices=["owned", "watched"], default="owned")
+    for f in FIELDS:
+        a.add_argument(f"--{f}", default="")
+    sub.add_parser("list")
+    s = sub.add_parser("switch"); s.add_argument("name")
+    r = sub.add_parser("remove"); r.add_argument("name")
+    y = sub.add_parser("sync"); y.add_argument("file")
+    args = ap.parse_args()
+    db = load()
+
+    if args.cmd == "add":
+        e = {"name": args.name, "channel_id": args.channel_id, "handle": args.handle, "type": args.type}
+        for f in FIELDS:
+            v = getattr(args, f)
+            e[f] = int(v) if f == "cadence" and v else v
+        _, new = upsert(db, e)
+        print(("Added " if new else "Updated ") + args.name)
+    elif args.cmd == "list":
+        for c in db["channels"]:
+            mark = "*" if c["name"] == db.get("active_channel") else " "
+            print(f"{mark} {c['name']:<24} {c['type']:<8} {c.get('handle','')}  {c.get('channel_id','')}")
+        if not db["channels"]:
+            print("No channels yet.")
+    elif args.cmd == "switch":
+        c = find(db, args.name)
+        if not c: sys.exit("Channel not found")
+        if c["type"] != "owned": sys.exit("Only owned channels can be active")
+        db["active_channel"] = c["name"]; print("Active:", c["name"])
+    elif args.cmd == "remove":
+        c = find(db, args.name)
+        if not c: sys.exit("Channel not found")
+        db["channels"].remove(c)
+        if db.get("active_channel") == c["name"]:
+            owned = [x for x in db["channels"] if x["type"] == "owned"]
+            db["active_channel"] = owned[0]["name"] if owned else None
+        print("Removed", c["name"], "(YouTube access itself is not revoked)")
+    elif args.cmd == "sync":
+        with open(args.file, encoding="utf-8") as f:
+            for ch in json.load(f):
+                upsert(db, {"name": ch.get("title") or ch["channelId"], "channel_id": ch["channelId"],
+                            "handle": ch.get("handle") or "", "type": "owned"})
+        print("Synced", len(db["channels"]), "channels")
+    save(db)
+
+if __name__ == "__main__":
+    main()
