@@ -1,0 +1,27 @@
+# Connect-channel flow (vidIQ connector)
+
+Use for: "add channel", "connect my YouTube", "reconnect", "wrong account", or when a vidIQ tool reports that no YouTube channel is connected.
+
+## Add an owned channel
+
+1. **Check what is already connected.** Call `vidiq_user_channels`. It returns title, handle, subscriber/view/video counts for each authorized channel and `authenticatedAs` (the connected vidIQ account email).
+   - Channel the user wants is listed -> skip to step 4.
+   - Empty list -> usually the wrong Google/vidIQ account was authorized. Tell the user which account (`authenticatedAs`) is connected and ask whether to continue with it or reconnect with the intended one.
+2. **Start the connection.** Call `vidiq_connect_youtube_channel`. Show the returned widget or authorization link and ask the user to complete it, then wait for them to confirm. Do not poll or loop.
+   - Status `verification_required` (account already has a channel): the user must confirm first. After they confirm, call the tool again to connect the new channel.
+3. **Re-verify.** After the user says it is done, call `vidiq_user_channels` again and confirm the new channel appears.
+4. **Fresh authorization when needed.** Before sensitive actions (video updates, thumbnail changes) call `vidiq_authorize_with_youtube` if a tool returns `verification_required`; show the link and wait. For comment replies, call it with `commentReplyChannelId` set to the owned channel ID, only when the user explicitly allows replies.
+5. **Register it.** Add or update the entry in `channels.json` (type `owned`, `channel_id`, `handle`), ask for any missing profile fields (niche, language, audience, cadence, voice), and set `active_channel` if it is the first channel.
+6. **Confirm** in one short line: channel name, handle, subscribers, and what the agent can now do (analytics, upload metadata, comments).
+
+## Add a watched (public) channel
+
+No OAuth. Resolve with `vidiq_get_channels_by_ids` (ID) or `vidiq_channel_search` / `vidiq_youtube_search` (name or niche), confirm with the user that it is the right channel (name + subscriber count), then add with type `watched`. Optionally compare against the user's tracked competitors via `vidiq_list_competitors`.
+
+## Rules
+
+- Never ask for or store passwords, tokens or API keys. Authorization happens only through the returned link.
+- Never retry a write after `verification_required` until the user confirms they finished verification.
+- Read-only research works for any channel; anything that changes a channel needs an owned, authorized one.
+- If a call fails with an auth error, say what failed, offer to reconnect, and do not fall back to public data when the task needs owner access (e.g. private videos).
+- Multiple accounts: show `authenticatedAs` whenever the list looks wrong.
