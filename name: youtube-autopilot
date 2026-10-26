@@ -1,0 +1,66 @@
+---
+name: youtube-autopilot
+description: Run a YouTube channel (or several) on autopilot - research what's working, plan the upload calendar, write scripts, package titles/thumbnails, write SEO, chapters, Shorts, and comment replies in one pipeline. Use whenever the user mentions YouTube autopilot, automating a channel, running my channel for me, "what should I post this week and make it", adding or switching channels, or wants an end-to-end video workflow instead of one single step. Orchestrates the yt-* skills and vidIQ tools; use even if the user only names one stage but clearly wants the whole flow.
+---
+
+# YouTube Autopilot
+
+An orchestrator. It does not replace the single-purpose yt-* skills; it decides which to run, in what order, for which channel, and keeps state between runs.
+
+## 1. Channel connector (add / list / switch / remove)
+
+Channels reach the agent through the vidIQ YouTube connector. Full step-by-step flow, statuses and error handling are in `references/connect-channel.md`; read it whenever the user wants to add, reconnect or switch a channel, or any tool says no channel is connected.
+
+Two kinds of channel, handled differently:
+- **Owned (connected)**: authorized by the user through OAuth. Needed for analytics, private videos, metadata updates and comment replies.
+- **Watched (public)**: any public channel, resolved by handle/URL/ID. Read-only; used for competitor and niche research.
+
+Commands the user can give in plain words:
+- "add channel" / "connect my channel" -> run the connect flow.
+- "list channels" -> `vidiq_user_channels` plus watched channels from the registry.
+- "switch to X" -> set `active_channel` in the registry.
+- "remove channel" -> remove from the registry only; tell the user that revoking YouTube access itself is done in their Google/vidIQ account settings.
+
+Registry code lives in `scripts/channel_registry.py` (add / list / switch / remove / sync); run it instead of editing JSON by hand. It maintains `channels.json` (see `references/channels-template.json`) with: `name`, `channel_id` (UC...), `handle`, `type` (owned | watched), `niche`, `language`, `audience`, `format` (long / shorts / both), `cadence`, `voice`, `off_limits`, plus a top-level `active_channel`. After every connect, re-read `vidiq_user_channels` and sync the registry from it; the connector is the source of truth for owned channels.
+
+- Multiple channels: ask which one only if the request is ambiguous. Never mix voices or audiences across channels.
+- Kids/family channels: apply `references/safety.md` before anything is drafted.
+
+## 2. Pipeline
+
+Run stages in order; skip stages the user already completed. Each stage hands its output to the next.
+
+| # | Stage | Use | Output |
+|---|-------|-----|--------|
+| 1 | Research | `yt-viral`, `vidiq_outliers`, `vidiq_keyword_research`, `vidiq_comment_insights` | 5-10 ranked ideas with why each works |
+| 2 | Plan | `yt-plan` | Calendar sized to the channel's cadence |
+| 3 | Script | `yt-script` | Hook options + full script |
+| 4 | Package | `yt-package` | Title + thumbnail text as one pairing |
+| 5 | SEO | `yt-seo`, `vidiq_score_title` | Description, tags |
+| 6 | Post-production | `yt-edit`, `yt-chapters`, `yt-shorts` | Edit list, chapters, Shorts cuts |
+| 7 | Community | `yt-comment` | Triaged reply drafts |
+| 8 | Learn | `yt-retention`, `vidiq_channel_analytics` | What to change next cycle |
+
+If a yt-* skill or vidIQ tool is unavailable, do the stage directly using the same principles and say so in one line.
+
+## 3. Modes
+
+- **Full run**: stages 1-5 for the next upload slot, then stop for approval.
+- **Weekly**: stage 2 for the week, stage 3-5 for the first video, stage 7 for new comments.
+- **Single stage**: user names one; run it with the channel's registry context.
+- **Review**: stages 7-8 on published videos.
+
+## 4. Human gates (non-negotiable)
+
+Draft everything, publish nothing without explicit approval. Specifically ask before: `vidiq_update_video`, `vidiq_update_video_thumbnail`, `vidiq_reply_to_comment`, `vidiq_instagram_publish_reel`. Show exactly what will change, then act only on a clear yes. Never publish in bulk from a single approval.
+
+## 5. Output format
+
+Per run, end with a short **Run summary**: channel, mode, stages done, files/drafts produced, what needs approval, suggested next step. Save long artifacts (scripts, calendars) as files rather than pasting them.
+
+## 6. Quality rules
+
+- Ground ideas in data (outliers, keyword volume, comments), not guesses; cite the numbers used.
+- Match the channel's `voice` and `language`. Do not invent facts, stats, or quotes in scripts.
+- Do not copy another creator's video; use competitor research for patterns, not text.
+- Respect `off_limits` and YouTube policy on spam, misleading metadata, and reused content.
